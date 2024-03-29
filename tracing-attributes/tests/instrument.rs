@@ -51,7 +51,7 @@ fn override_everything() {
 #[test]
 fn fields() {
     #[instrument(target = "my_target", level = "debug")]
-    fn my_fn(arg1: usize, arg2: bool) {}
+    fn my_fn(arg1: usize, arg2: bool, arg3: String) {}
 
     let span = expect::span()
         .named("my_fn")
@@ -64,10 +64,11 @@ fn fields() {
         .with_target("my_target");
     let (collector, handle) = collector::mock()
         .new_span(
-            span.clone().with_field(
+            span.clone().with_fields(
                 expect::field("arg1")
                     .with_value(&2usize)
                     .and(expect::field("arg2").with_value(&false))
+                    .and(expect::field("arg3").with_value(&"Cool".to_string()))
                     .only(),
             ),
         )
@@ -75,10 +76,11 @@ fn fields() {
         .exit(span.clone())
         .drop_span(span)
         .new_span(
-            span2.clone().with_field(
+            span2.clone().with_fields(
                 expect::field("arg1")
                     .with_value(&3usize)
                     .and(expect::field("arg2").with_value(&true))
+                    .and(expect::field("arg3").with_value(&"Still Cool".to_string()))
                     .only(),
             ),
         )
@@ -89,8 +91,8 @@ fn fields() {
         .run_with_handle();
 
     with_default(collector, || {
-        my_fn(2, false);
-        my_fn(3, true);
+        my_fn(2, false, "Cool".to_string());
+        my_fn(3, true, "Still Cool".to_string());
     });
 
     handle.assert_finished();
@@ -115,7 +117,7 @@ fn skip() {
     let (collector, handle) = collector::mock()
         .new_span(
             span.clone()
-                .with_field(expect::field("arg1").with_value(&2usize).only()),
+                .with_fields(expect::field("arg1").with_value(&2usize).only()),
         )
         .enter(span.clone())
         .exit(span.clone())
@@ -123,7 +125,7 @@ fn skip() {
         .new_span(
             span2
                 .clone()
-                .with_field(expect::field("arg1").with_value(&3usize).only()),
+                .with_fields(expect::field("arg1").with_value(&3usize).only()),
         )
         .enter(span2.clone())
         .exit(span2.clone())
@@ -155,7 +157,7 @@ fn generics() {
 
     let (collector, handle) = collector::mock()
         .new_span(
-            span.clone().with_field(
+            span.clone().with_fields(
                 expect::field("arg1")
                     .with_value(&format_args!("Foo"))
                     .and(expect::field("arg2").with_value(&format_args!("false"))),
@@ -188,7 +190,7 @@ fn methods() {
 
     let (collector, handle) = collector::mock()
         .new_span(
-            span.clone().with_field(
+            span.clone().with_fields(
                 expect::field("self")
                     .with_value(&format_args!("Foo"))
                     .and(expect::field("arg1").with_value(&42usize)),
@@ -220,7 +222,7 @@ fn impl_trait_return_type() {
     let (collector, handle) = collector::mock()
         .new_span(
             span.clone()
-                .with_field(expect::field("x").with_value(&10usize).only()),
+                .with_fields(expect::field("x").with_value(&10usize).only()),
         )
         .enter(span.clone())
         .exit(span.clone())

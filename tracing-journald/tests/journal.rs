@@ -5,8 +5,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use serde::Deserialize;
-use tracing::{debug, error, info, info_span, warn};
-use tracing_journald::Subscriber;
+use tracing::{debug, error, info, info_span, trace, warn};
+use tracing_journald::{Priority, PriorityMappings, Subscriber};
 use tracing_subscriber::subscribe::CollectExt;
 use tracing_subscriber::Registry;
 
@@ -16,7 +16,16 @@ fn journalctl_version() -> std::io::Result<String> {
 }
 
 fn with_journald(f: impl FnOnce()) {
-    with_journald_subscriber(Subscriber::new().unwrap().with_field_prefix(None), f)
+    with_journald_subscriber(
+        Subscriber::new()
+            .unwrap()
+            .with_field_prefix(None)
+            .with_priority_mappings(PriorityMappings {
+                trace: Priority::Informational,
+                ..PriorityMappings::new()
+            }),
+        f,
+    )
 }
 
 fn with_journald_subscriber(subscriber: Subscriber, f: impl FnOnce()) {
@@ -168,6 +177,41 @@ fn simple_message() {
 }
 
 #[test]
+fn custom_priorities() {
+    fn check_message(level: &str, priority: &str) {
+        let entry = retry_read_one_line_from_journal(&format!("custom_priority.{}", level));
+        assert_eq!(entry["MESSAGE"], format!("hello {}", level).as_str());
+        assert_eq!(entry["PRIORITY"], priority);
+    }
+
+    let priorities = PriorityMappings {
+        error: Priority::Critical,
+        warn: Priority::Error,
+        info: Priority::Warning,
+        debug: Priority::Notice,
+        trace: Priority::Informational,
+    };
+    let subscriber = Subscriber::new()
+        .unwrap()
+        .with_field_prefix(None)
+        .with_priority_mappings(priorities);
+    let test = || {
+        trace!(test.name = "custom_priority.trace", "hello trace");
+        check_message("trace", "6");
+        debug!(test.name = "custom_priority.debug", "hello debug");
+        check_message("debug", "5");
+        info!(test.name = "custom_priority.info", "hello info");
+        check_message("info", "4");
+        warn!(test.name = "custom_priority.warn", "hello warn");
+        check_message("warn", "3");
+        error!(test.name = "custom_priority.error", "hello error");
+        check_message("error", "2");
+    };
+
+    with_journald_subscriber(subscriber, test);
+}
+
+#[test]
 fn multiline_message() {
     with_journald(|| {
         warn!(test.name = "multiline_message", "Hello\nMultiline\nWorld");
@@ -232,6 +276,28 @@ fn simple_metadata() {
         assert_eq!(message["PRIORITY"], "5");
         assert_eq!(message["TARGET"], "journal");
         assert_eq!(message["SYSLOG_IDENTIFIER"], "test_ident");
+        assert!(message["CODE_FILE"].as_text().is_some());
+        assert!(message["CODE_LINE"].as_text().is_some());
+    });
+}
+
+#[test]
+fn journal_fields() {
+    let sub = Subscriber::new()
+        .unwrap()
+        .with_field_prefix(None)
+        .with_custom_fields([("SYSLOG_FACILITY", "17")])
+        .with_custom_fields([("ABC", "dEf"), ("XYZ", "123")]);
+    with_journald_subscriber(sub, || {
+        info!(test.name = "journal_fields", "Hello World");
+
+        let message = retry_read_one_line_from_journal("journal_fields");
+        assert_eq!(message["MESSAGE"], "Hello World");
+        assert_eq!(message["PRIORITY"], "5");
+        assert_eq!(message["TARGET"], "journal");
+        assert_eq!(message["SYSLOG_FACILITY"], "17");
+        assert_eq!(message["ABC"], "dEf");
+        assert_eq!(message["XYZ"], "123");
         assert!(message["CODE_FILE"].as_text().is_some());
         assert!(message["CODE_LINE"].as_text().is_some());
     });

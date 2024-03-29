@@ -66,11 +66,11 @@ pub(crate) fn gen_function<'a, B: ToTokens + 'a>(
     let fake_return_edge = quote_spanned! {return_span=>
         #[allow(
             unknown_lints, unreachable_code, clippy::diverging_sub_expression,
-            clippy::let_unit_value, clippy::unreachable, clippy::let_with_type_underscore
+            clippy::let_unit_value, clippy::unreachable, clippy::let_with_type_underscore,
+            clippy::empty_loop
         )]
         if false {
-            let __tracing_attr_fake_return: #return_type =
-                unreachable!("this is just for type inference, and is unreachable code");
+            let __tracing_attr_fake_return: #return_type = loop {};
             return __tracing_attr_fake_return;
         }
     };
@@ -343,7 +343,7 @@ fn gen_block<B: ToTokens>(
         // regression in case the level is enabled.
         let __tracing_attr_span;
         let __tracing_attr_guard;
-        if tracing::level_enabled!(#level) {
+        if tracing::level_enabled!(#level) || tracing::if_log_enabled!(#level, {true} else {false}) {
             __tracing_attr_span = #span;
             #follows_from
             __tracing_attr_guard = __tracing_attr_span.enter();
@@ -422,10 +422,13 @@ impl RecordType {
         "i32",
         "u64",
         "i64",
+        "u128",
+        "i128",
         "f32",
         "f64",
         "usize",
         "isize",
+        "String",
         "NonZeroU8",
         "NonZeroI8",
         "NonZeroU16",
@@ -434,6 +437,8 @@ impl RecordType {
         "NonZeroI32",
         "NonZeroU64",
         "NonZeroI64",
+        "NonZeroU128",
+        "NonZeroI128",
         "NonZeroUsize",
         "NonZeroIsize",
         "Wrapping",

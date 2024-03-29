@@ -430,7 +430,7 @@
 //!   callsite). See [`Collect::register_callsite`] and
 //!   [`tracing_core::callsite`] for a summary of how this behaves.
 //! - [`enabled`], once per emitted event (roughly: once per time that `event!`
-//!   or `span!` is *executed*), and only if `register_callsite` regesters an
+//!   or `span!` is *executed*), and only if `register_callsite` registers an
 //!   [`Interest::sometimes`]. This is the main customization point to globally
 //!   filter events based on their [`Metadata`]. If an event can be disabled
 //!   based only on [`Metadata`], it should be, as this allows the construction
@@ -464,11 +464,29 @@
 //!
 //! This crate's [`filter`] module provides a number of types which implement
 //! the [`Filter`] trait, such as [`LevelFilter`], [`Targets`], and
-//! [`FilterFn`]. These [`Filter`]s provide ready-made implementations of
-//! common forms of filtering. For custom filtering policies, the [`FilterFn`]
-//! and [`DynFilterFn`] types allow implementing a [`Filter`] with a closure or
+//! [`FilterFn`]. These [`Filter`]s provide ready-made implementations of common
+//! forms of filtering. For custom filtering policies, the [`FilterFn`] and
+//! [`DynFilterFn`] types allow implementing a [`Filter`] with a closure or
 //! function pointer. In addition, when more control is required, the [`Filter`]
 //! trait may also be implemented for user-defined types.
+//!
+//! [`Option<Filter>`] also implements [`Filter`], which allows for an optional
+//! filter. [`None`](Option::None) filters out _nothing_ (that is, allows
+//! everything through). For example:
+//!
+//! ```rust
+//! # use tracing_subscriber::{filter::filter_fn, Subscribe};
+//! # use tracing_core::{Metadata, collect::Collect};
+//! # struct MySubscriber<C>(std::marker::PhantomData<C>);
+//! # impl<C> MySubscriber<C> { fn new() -> Self { Self(std::marker::PhantomData)} }
+//! # impl<C: Collect> Subscribe<C> for MySubscriber<C> {}
+//! # fn my_filter(_: &str) -> impl Fn(&Metadata) -> bool { |_| true  }
+//! fn setup_tracing<C: Collect>(filter_config: Option<&str>) {
+//!     let layer = MySubscriber::<C>::new()
+//!         .with_filter(filter_config.map(|config| filter_fn(my_filter(config))));
+//! //...
+//! }
+//! ```
 //!
 //! <div class="example-wrap" style="display:inline-block">
 //! <pre class="compile_fail" style="white-space:normal;font:inherit;">
@@ -750,7 +768,7 @@ where
     /// [`Collect`] has been set as the default, both the subscriber and
     /// [`Collect`] are passed to this method _mutably_. This gives the
     /// subscribe the opportunity to set any of its own fields with values
-    /// recieved by method calls on the [`Collect`].
+    /// received by method calls on the [`Collect`].
     ///
     /// For example, [`Filtered`] subscribers implement `on_subscribe` to call the
     /// [`Collect`]'s [`register_filter`] method, and store the returned
@@ -882,7 +900,7 @@ where
     ///
     /// **Note**: This method determines whether an event is globally enabled,
     /// *not* whether the individual subscriber will be notified about the
-    /// event. This is intended to be used by subscibers that implement
+    /// event. This is intended to be used by subscribers that implement
     /// filtering for the entire stack. Subscribers which do not wish to be
     /// notified about certain events but do not wish to globally disable them
     /// should ignore those events in their [on_event][Self::on_event].
@@ -1269,7 +1287,7 @@ pub trait Filter<S> {
     /// <pre class="ignore" style="white-space:normal;font:inherit;">
     /// <strong>Note</strong>: If a <code>Filter</code> will perform
     /// <em>dynamic filtering</em> that depends on the current context in which
-    /// a span or event was observered (e.g. only enabling an event when it
+    /// a span or event was observed (e.g. only enabling an event when it
     /// occurs within a particular span), it <strong>must</strong> return
     /// <code>Interest::sometimes()</code> from this method. If it returns
     /// <code>Interest::always()</code> or <code>Interest::never()</code>, the
@@ -1288,7 +1306,7 @@ pub trait Filter<S> {
     /// other hand, when a `Filter` returns [`Interest::always()`][always] or
     /// [`Interest::never()`][never] for a callsite, _other_ [`Subscribe`]s may have
     /// differing interests in that callsite. If this is the case, the callsite
-    /// will recieve [`Interest::sometimes()`][sometimes], and the [`enabled`]
+    /// will receive [`Interest::sometimes()`][sometimes], and the [`enabled`]
     /// method will still be called for that callsite when it records a span or
     /// event.
     ///
